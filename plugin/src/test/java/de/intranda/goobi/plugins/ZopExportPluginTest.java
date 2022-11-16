@@ -1,9 +1,12 @@
 package de.intranda.goobi.plugins;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 import java.io.File;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 
 import org.apache.commons.configuration.ConfigurationException;
@@ -20,11 +23,14 @@ import org.powermock.api.easymock.PowerMock;
 import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
+import org.powermock.reflect.internal.WhiteboxImpl;
 
 import de.sub.goobi.config.ConfigPlugins;
+import de.sub.goobi.helper.NIOFileUtils;
+import de.sub.goobi.helper.StorageProvider;
 
 @RunWith(PowerMockRunner.class)
-@PrepareForTest({ ConfigPlugins.class })
+@PrepareForTest({ ConfigPlugins.class, ZopExportPlugin.class, StorageProvider.class })
 @PowerMockIgnore({ "javax.management.*", "javax.net.ssl.*", "jdk.internal.reflect.*" })
 public class ZopExportPluginTest {
 
@@ -42,7 +48,6 @@ public class ZopExportPluginTest {
         }
 
         String log4jFile = resourcesFolder + "log4j2.xml"; // for junit tests in eclipse
-
         System.setProperty("log4j.configurationFile", log4jFile);
     }
 
@@ -50,15 +55,13 @@ public class ZopExportPluginTest {
     public void setUp() throws Exception {
         tempFolder = folder.newFolder("tmp");
 
-        resourcesFolder = "src/test/resources/"; // for junit tests in eclipse
-
-        if (!Files.exists(Paths.get(resourcesFolder))) {
-            resourcesFolder = "target/test-classes/"; // to run mvn test from cli or in jenkins
-        }
-
         PowerMock.mockStatic(ConfigPlugins.class);
         EasyMock.expect(ConfigPlugins.getPluginConfig(EasyMock.anyString())).andReturn(getConfig()).anyTimes();
         PowerMock.replay(ConfigPlugins.class);
+
+        PowerMock.mockStatic(StorageProvider.class);
+        EasyMock.expect(StorageProvider.getInstance()).andReturn(new NIOFileUtils());
+        PowerMock.replay(StorageProvider.class);
     }
 
     @Test
@@ -77,6 +80,53 @@ public class ZopExportPluginTest {
         }
         config.setReloadingStrategy(new FileChangedReloadingStrategy());
         return config;
+    }
+
+    /*================= Tests for the private methods ================= */
+
+    /* Tests for the method createFolder(Path) */
+    @Test
+    public void testCreateFolderGivenNull() throws Exception {
+        ZopExportPlugin plugin = new ZopExportPlugin();
+        assertFalse(WhiteboxImpl.invokeMethod(plugin, "createFolder", null));
+    }
+
+    @Test
+    public void testCreateFolderGivenEmptyPath() throws Exception {
+        ZopExportPlugin plugin = new ZopExportPlugin();
+        assertFalse(WhiteboxImpl.invokeMethod(plugin, "createFolder", Paths.get("")));
+    }
+
+    @Test
+    public void testCreateFolderGivenExistingPath() throws Exception {
+        ZopExportPlugin plugin = new ZopExportPlugin();
+        Path temp = Paths.get("/tmp");
+        assertTrue(Files.exists(temp));
+        assertTrue(WhiteboxImpl.invokeMethod(plugin, "createFolder", temp));
+    }
+
+    @Test
+    public void testCreateFolderGivenUnexistingPath() throws Exception {
+        ZopExportPlugin plugin = new ZopExportPlugin();
+        final Path path = Paths.get("/tmp/unexisting_path");
+        assertFalse(Files.exists(path));
+        assertTrue(WhiteboxImpl.invokeMethod(plugin, "createFolder", path));
+        assertTrue(Files.exists(path));
+        Files.delete(path);
+        assertFalse(Files.exists(path));
+    }
+
+    /* Tests for the method createCTL(Path) */
+    @Test
+    public void testCreateCTLGivenAPath() throws Exception {
+        ZopExportPlugin plugin = new ZopExportPlugin();
+        final Path path = Paths.get("/tmp/ctl_test");
+        final Path filePath = path.getParent().resolve(path.getFileName().toString().concat(".ctl"));
+        assertFalse(Files.exists(filePath));
+        WhiteboxImpl.invokeMethod(plugin, "createCTL", path);
+        assertTrue(Files.exists(filePath));
+        Files.delete(filePath);
+        assertFalse(Files.exists(filePath));
     }
 
 }
