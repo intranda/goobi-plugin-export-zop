@@ -13,12 +13,19 @@ import org.apache.commons.configuration.XMLConfiguration;
 import org.apache.commons.configuration.reloading.FileChangedReloadingStrategy;
 import org.apache.commons.configuration.tree.xpath.XPathExpressionEngine;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.poi.util.StringUtil;
 import org.goobi.beans.Process;
 import org.goobi.beans.Step;
 import org.goobi.production.enums.LogType;
 import org.goobi.production.enums.PluginType;
 import org.goobi.production.plugin.interfaces.IExportPlugin;
 import org.goobi.production.plugin.interfaces.IPlugin;
+
+import com.jcraft.jsch.ChannelSftp;
+import com.jcraft.jsch.JSch;
+import com.jcraft.jsch.JSchException;
+import com.jcraft.jsch.Session;
+import com.jcraft.jsch.SftpException;
 
 import de.sub.goobi.config.ConfigPlugins;
 import de.sub.goobi.helper.Helper;
@@ -63,6 +70,11 @@ public class ZopExportPlugin implements IExportPlugin, IPlugin {
 
     @Getter
     private List<String> problems;
+
+    private transient ChannelSftp sftpChannel;
+    private String username;
+    private String hostname;
+    private String keyPath;
 
     @Override
     public void setExportFulltext(boolean arg0) {
@@ -117,7 +129,7 @@ public class ZopExportPlugin implements IExportPlugin, IPlugin {
         String fieldVolume = config.getString("volume").trim();
 
         if (StringUtils.isBlank(fieldIdentifier) || StringUtils.isBlank(fieldVolume)) {
-            logBoth(process.getId(), LogType.ERROR, "The configuration file for the VLM export is incomplete.");
+            logBoth(process.getId(), LogType.ERROR, "The configuration file for the ZOP export is incomplete.");
             logBoth(process.getId(), LogType.ERROR, ABORTION_MESSAGE + process.getId());
             return false;
         }
@@ -177,19 +189,42 @@ public class ZopExportPlugin implements IExportPlugin, IPlugin {
             return false;
         }
 
+        // prepare sftpChannel if necessary
+        boolean useSftp = config.getBoolean("sftp", false);
+        if (useSftp) {
+            username = config.getString("username").trim();
+            hostname = config.getString("hostname").trim();
+            keyPath = config.getString("keyPath").trim();
+
+            if (StringUtil.isBlank(username) || StringUtil.isBlank(hostname)) {
+                logBoth(process.getId(), LogType.ERROR, "The configuration file for the ZOP export is incomplete.");
+                logBoth(process.getId(), LogType.ERROR, ABORTION_MESSAGE + process.getId());
+                return false;
+            }
+
+            try {
+                sftpChannel = setupJSch();
+                sftpChannel.connect();
+            } catch (JSchException e) {
+                log.debug("failed to initialize sftpChannel");
+                e.printStackTrace();
+                return false;
+            }
+        }
+
         folderName = isOneVolumeWork ? id : id + NAME_SEPARATOR + volumeTitle;
         log.debug("folderName = " + folderName);
 
         // create a folder named after folderName
         savingPath = savingPath.resolve(folderName);
-        if (!createFolder(savingPath)) {
+        if (!createFolder(useSftp, savingPath)) {
             logBoth(process.getId(), LogType.ERROR, "Something went wrong trying to create the directory: " + savingPath.toString());
             logBoth(process.getId(), LogType.ERROR, ABORTION_MESSAGE + process.getId());
             return false;
         }
 
         // if everything went well so far, then we only need to do the copy
-        return tryCopy(process, Paths.get(masterPath), savingPath);
+        return tryCopy(process, Paths.get(masterPath), savingPath, useSftp);
     }
 
     /**
@@ -219,10 +254,33 @@ public class ZopExportPlugin implements IExportPlugin, IPlugin {
 
     /**
      * 
+     * @param useSftp true if use SFTP, false otherwise
+     * @param path absolute path of the target folder
+     * @return true if the folder already exists or is successfully created, false if failure happened.
+     */
+    private boolean createFolder(boolean useSftp, Path path) {
+        if (path == null) {
+            log.error("The path provided is null!");
+            return false;
+        }
+        if (StringUtils.isBlank(path.toString())) {
+            log.error("The path provided is empty!");
+            return false;
+        }
+        try {
+            return useSftp ? createFolderSftp(path) : createFolderLocal(path);
+        } catch (SftpException e) {
+            log.error("Failed to create directory remotely: " + path.toString());
+            return false;
+        }
+    }
+
+    /**
+     * 
      * @param path the absolute path of the targeted folder
      * @return true if the folder already exists or is successfully created, false if failure happens.
      */
-    private boolean createFolder(Path path) {
+    private boolean createFolderLocal(Path path) {
         if (path == null) {
             log.error("The path provided is null!");
             return false;
@@ -248,6 +306,49 @@ public class ZopExportPlugin implements IExportPlugin, IPlugin {
 
     /**
      * 
+     * @param path absolute path of the target folder
+     * @return true if the folder already exists or is successfully created, false if failure happened.
+     * @throws SftpException
+     */
+    private boolean createFolderSftp(Path path) throws SftpException {
+        sftpChannel.cd("/");
+        log.debug("pwd = " + sftpChannel.pwd());
+
+        boolean directoryCreated = false;
+        String pathString = path.toString();
+        String[] folders = pathString.split("/");
+        for (String folder : folders) {
+            if (folder.equals(".") || folder.equals("..")) {
+                sftpChannel.cd(folder);
+                continue;
+            }
+            if (folder.length() > 0 && !folder.contains(".")) { // avoid creating hidden folders
+                // this is a valid folder
+                try {
+                    sftpChannel.cd(folder);
+                    log.debug("pwd = " + sftpChannel.pwd());
+                } catch (SftpException e) {
+                    // no such folder yet, hence try to create it first
+                    sftpChannel.mkdir(folder);
+                    log.debug("folder created: " + folder);
+                    sftpChannel.cd(folder);
+                    log.debug("pwd = " + sftpChannel.pwd());
+                    directoryCreated = true;
+                }
+            }
+        }
+        // check if the directory is successfully created
+        if (sftpChannel.ls(pathString).size() >= 2) { // because of the existence of `.` and `..` in empty folders
+            String temp = directoryCreated ? "Directory created remotely: " : "Directory already exisits remotely: ";
+            log.debug(temp + path.toString());
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * 
      * @param logical logical structure of a book as an object of DocStruct
      * @param fieldName value of which we want inside "logical"
      * @return the value of "fieldName" inside "logical" as String
@@ -266,21 +367,82 @@ public class ZopExportPlugin implements IExportPlugin, IPlugin {
 
     /**
      * 
-     * @param path whose folderName and parent will be used
+     * @param process
+     * @param fromPath absolute path to the source folder
+     * @param toPath absolute path to the target folder
+     * @param useSftp true if use SFTP, false otherwise
+     * @return true if the copy is successfully performed, false otherwise
+     */
+    private boolean tryCopy(Process process, Path fromPath, Path toPath, boolean useSftp) {
+        try {
+            return useSftp ? tryCopySftp(process, fromPath, toPath) : tryCopyLocal(process, fromPath, toPath);
+        } finally {
+            sftpChannel.exit();
+            log.debug("=============================== Stopping ZOP Export ===============================");
+        }
+    }
+
+    /**
+     * 
+     * @param process
+     * @param fromPath absolute path to the souce folder
+     * @param toPath absolute path to the target folder
+     * @return true if the copy is successfully performed, false otherwise
      * @throws IOException
      */
-    private void createCTL(Path path) throws IOException {
-        // the .ctl file should have the same name as the folder specified by this path
-        String fileName = path.getFileName().toString().concat(".ctl");
-        // and it should be created next to the folder, i.e. into the folder's parent's path
-        Path parentPath = path.getParent();
+    private boolean tryCopyLocal(Process process, Path fromPath, Path toPath) {
         StorageProviderInterface provider = StorageProvider.getInstance();
-        try {
-            provider.createFile(parentPath.resolve(fileName));
-        } catch (IOException e) {
-            log.debug("Some error happened while trying to create the .ctl file.");
-            throw e;
+        if (!provider.list(toPath.toString()).isEmpty()) {
+            logBoth(process.getId(), LogType.ERROR, "The directory: '" + toPath.toString() + "' is not empty!");
+            logBoth(process.getId(), LogType.ERROR, ABORTION_MESSAGE + process.getId());
+            return false;
         }
+        // if the folder is empty, great!
+        try {
+            copyImagesLocal(fromPath, toPath);
+            createCTLLocal(toPath);
+
+        } catch (IOException e) {
+            logBoth(process.getId(), LogType.ERROR,
+                    "Errors happened trying to copy from '" + fromPath.toString() + "' to '" + toPath.toString() + "'.");
+            logBoth(process.getId(), LogType.ERROR, ABORTION_MESSAGE + process.getId());
+            return false;
+        }
+        logBoth(process.getId(), LogType.INFO, "Images from '" + fromPath.toString() + "' are successfully copied to '" + toPath.toString() + "'.");
+        logBoth(process.getId(), LogType.INFO, COMPLETION_MESSAGE + process.getId());
+        return true;
+    }
+
+    /**
+     * 
+     * @param process
+     * @param fromPath absolute path to the source folder
+     * @param toPath absolute path to the target folder
+     * @return true if the copy is successfully performed, false otherwise
+     */
+    private boolean tryCopySftp(Process process, Path fromPath, Path toPath) {
+        try {
+            // check if the targeted directory is empty:
+            if (sftpChannel.ls(toPath.toString()).size() > 2) { // because of the existence of `.` and `..` in empty folders
+                logBoth(process.getId(), LogType.ERROR, "The directory: '" + toPath.toString() + "' is not empty!");
+                logBoth(process.getId(), LogType.ERROR, ABORTION_MESSAGE + process.getId());
+                return false;
+            }
+            // if the folder is empty, great!
+            copyImagesSftp(fromPath, toPath);
+            createCTLSftp(toPath);
+
+        } catch (Exception e) {
+            logBoth(process.getId(), LogType.ERROR,
+                    "Errors happened trying to copy from '" + fromPath.toString() + "' to '" + username + "@" + hostname + ":" + toPath.toString()
+                            + "'.");
+            logBoth(process.getId(), LogType.ERROR, ABORTION_MESSAGE + process.getId());
+            return false;
+        }
+        logBoth(process.getId(), LogType.INFO, "Images from '" + fromPath.toString() + "' are successfully copied to '" + username + "@" + hostname
+                + ":" + toPath.toString() + "'.");
+        logBoth(process.getId(), LogType.INFO, COMPLETION_MESSAGE + process.getId());
+        return true;
     }
 
     /**
@@ -289,7 +451,7 @@ public class ZopExportPlugin implements IExportPlugin, IPlugin {
      * @param toPath absolute path to the targeted folder
      * @throws IOException
      */
-    private void copyImages(Path fromPath, Path toPath) throws IOException {
+    private void copyImagesLocal(Path fromPath, Path toPath) throws IOException {
         log.debug("Copy images from '" + fromPath.toString() + "' to '" + toPath.toString() + "'.");
         StorageProviderInterface provider = StorageProvider.getInstance();
         List<String> files = provider.list(fromPath.toString());
@@ -325,35 +487,68 @@ public class ZopExportPlugin implements IExportPlugin, IPlugin {
     }
 
     /**
-     * 
-     * @param process
-     * @param fromPath absolute path to the souce folder
+     * @param fromPath absolute path to the source folder
      * @param toPath absolute path to the target folder
-     * @return true if the copy is successfully performed, false otherwise
+     */
+    private void copyImagesSftp(Path fromPath, Path toPath) throws SftpException {
+        log.debug("Copy images from '" + fromPath.toString() + "' to '" + username + "@" + hostname + ":" + toPath.toString() + "'.");
+        StorageProviderInterface provider = StorageProvider.getInstance();
+        List<String> files = provider.list(fromPath.toString());
+        for (String file : files) {
+            Path srcPath = fromPath.resolve(file);
+            Path destPath = toPath.resolve(file);
+            sftpChannel.put(srcPath.toString(), destPath.toString());
+        }
+
+        // No need for a checksum checking logic here, since the JSch library uses its internal algorithms to assure the integrity of transfered data.
+    }
+
+    /**
+     * 
+     * @param path whose folderName and parent will be used
      * @throws IOException
      */
-    private boolean tryCopy(Process process, Path fromPath, Path toPath) {
+    private void createCTLLocal(Path path) throws IOException {
+        // the .ctl file should have the same name as the folder specified by this path
+        String fileName = path.getFileName().toString().concat(".ctl");
+        // and it should be created next to the folder, i.e. into the folder's parent's path
+        Path parentPath = path.getParent();
         StorageProviderInterface provider = StorageProvider.getInstance();
-        if (!provider.list(toPath.toString()).isEmpty()) {
-            logBoth(process.getId(), LogType.ERROR, "The directory: '" + toPath.toString() + "' is not empty!");
-            logBoth(process.getId(), LogType.ERROR, ABORTION_MESSAGE + process.getId());
-            return false;
-        }
-        // if the folder is empty, great!
         try {
-            copyImages(fromPath, toPath);
-            createCTL(toPath);
-
+            provider.createFile(parentPath.resolve(fileName));
         } catch (IOException e) {
-            logBoth(process.getId(), LogType.ERROR,
-                    "Errors happened trying to copy from '" + fromPath.toString() + "' to '" + toPath.toString() + "'.");
-            logBoth(process.getId(), LogType.ERROR, ABORTION_MESSAGE + process.getId());
-            return false;
+            log.debug("Some error happened while trying to create the .ctl file.");
+            throw e;
         }
-        logBoth(process.getId(), LogType.INFO, "Images from '" + fromPath.toString() + "' are successfully copied to '" + toPath.toString() + "'.");
-        logBoth(process.getId(), LogType.INFO, COMPLETION_MESSAGE + process.getId());
-        log.debug("=============================== Stopping ZOP Export ===============================");
-        return true;
+    }
+
+    /**
+     * 
+     * @param path whose folderName and parent will be used
+     * @throws IOException
+     * @throws SftpException
+     */
+    private void createCTLSftp(Path path) throws IOException, SftpException {
+        // the .ctl file should have the same name as the folder specified by this path
+        String fileName = path.getFileName().toString().concat(".ctl");
+        // and it should be created next to the folder, i.e. into the folder's parent's path
+        Path parentPath = path.getParent();
+        StorageProviderInterface provider = StorageProvider.getInstance();
+        try {
+            // create the empty .ctl file locally under /tmp
+            Path srcPath = Path.of("/tmp/", fileName);
+            provider.createFile(srcPath);
+
+            // copy this .ctl file to the remote location
+            Path destPath = parentPath.resolve(fileName);
+            sftpChannel.put(srcPath.toString(), destPath.toString());
+
+            // remove the local .ctl file
+            provider.deleteFile(srcPath);
+        } catch (IOException e) {
+            log.debug("Some error happened while trying to create the .ctl file locally.");
+            throw e;
+        }
     }
 
     /**
@@ -381,6 +576,20 @@ public class ZopExportPlugin implements IExportPlugin, IPlugin {
         if (processId > 0) {
             Helper.addMessageToProcessJournal(processId, logType, logMessage);
         }
+    }
+
+    /**
+     * 
+     * @return ChannelSftp object
+     * @throws JSchException
+     */
+    private ChannelSftp setupJSch() throws JSchException {
+        JSch.setConfig("StrictHostKeyChecking", "no");
+        JSch jsch = new JSch();
+        jsch.addIdentity(keyPath);
+        Session jschSession = jsch.getSession(username, hostname);
+        jschSession.connect();
+        return (ChannelSftp) jschSession.openChannel("sftp");
     }
 
 }

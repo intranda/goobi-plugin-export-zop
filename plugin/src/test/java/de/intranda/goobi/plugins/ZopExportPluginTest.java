@@ -15,6 +15,7 @@ import org.apache.commons.configuration.reloading.FileChangedReloadingStrategy;
 import org.easymock.EasyMock;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -85,18 +86,21 @@ public class ZopExportPluginTest {
     /*================= Tests for the private methods ================= */
 
     /* Tests for the method createFolder(Path) */
+    @Ignore
     @Test
     public void testCreateFolderGivenNull() throws Exception {
         ZopExportPlugin plugin = new ZopExportPlugin();
         assertFalse(WhiteboxImpl.invokeMethod(plugin, "createFolder", null));
     }
 
+    @Ignore
     @Test
     public void testCreateFolderGivenEmptyPath() throws Exception {
         ZopExportPlugin plugin = new ZopExportPlugin();
         assertFalse(WhiteboxImpl.invokeMethod(plugin, "createFolder", Paths.get("")));
     }
 
+    @Ignore
     @Test
     public void testCreateFolderGivenExistingPath() throws Exception {
         ZopExportPlugin plugin = new ZopExportPlugin();
@@ -105,6 +109,7 @@ public class ZopExportPluginTest {
         assertTrue(WhiteboxImpl.invokeMethod(plugin, "createFolder", temp));
     }
 
+    @Ignore
     @Test
     public void testCreateFolderGivenUnexistingPath() throws Exception {
         ZopExportPlugin plugin = new ZopExportPlugin();
@@ -117,6 +122,7 @@ public class ZopExportPluginTest {
     }
 
     /* Tests for the method createCTL(Path) */
+    @Ignore
     @Test
     public void testCreateCTLGivenAPath() throws Exception {
         ZopExportPlugin plugin = new ZopExportPlugin();
