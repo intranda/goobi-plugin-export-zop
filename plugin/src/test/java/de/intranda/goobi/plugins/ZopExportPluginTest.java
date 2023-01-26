@@ -55,7 +55,7 @@ public class ZopExportPluginTest {
     @Before
     public void setUp() throws Exception {
         tempFolder = folder.newFolder("tmp");
-        tempFolderDirectory = tempFolder.getAbsolutePath().toString();
+        tempFolderDirectory = tempFolder.getAbsolutePath();
 
         PowerMock.mockStatic(ConfigPlugins.class);
         EasyMock.expect(ConfigPlugins.getPluginConfig(EasyMock.anyString())).andReturn(getConfig()).anyTimes();
