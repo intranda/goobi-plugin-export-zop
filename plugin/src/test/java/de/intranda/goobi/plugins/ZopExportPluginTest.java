@@ -15,7 +15,6 @@ import org.apache.commons.configuration.reloading.FileChangedReloadingStrategy;
 import org.easymock.EasyMock;
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -39,6 +38,7 @@ public class ZopExportPluginTest {
     public TemporaryFolder folder = new TemporaryFolder();
     private File tempFolder;
     private static String resourcesFolder;
+    private String tempFolderDirectory;
 
     @BeforeClass
     public static void setUpClass() throws Exception {
@@ -55,6 +55,7 @@ public class ZopExportPluginTest {
     @Before
     public void setUp() throws Exception {
         tempFolder = folder.newFolder("tmp");
+        tempFolderDirectory = tempFolder.getAbsolutePath().toString();
 
         PowerMock.mockStatic(ConfigPlugins.class);
         EasyMock.expect(ConfigPlugins.getPluginConfig(EasyMock.anyString())).andReturn(getConfig()).anyTimes();
@@ -85,51 +86,46 @@ public class ZopExportPluginTest {
 
     /*================= Tests for the private methods ================= */
 
-    /* Tests for the method createFolder(Path) */
-    @Ignore
+    /* Tests for the method createFolderLocal(Path) */
     @Test
-    public void testCreateFolderGivenNull() throws Exception {
+    public void testCreateFolderLocalGivenNull() throws Exception {
         ZopExportPlugin plugin = new ZopExportPlugin();
-        assertFalse(WhiteboxImpl.invokeMethod(plugin, "createFolder", null));
+        assertFalse(WhiteboxImpl.invokeMethod(plugin, "createFolderLocal", null));
     }
 
-    @Ignore
     @Test
-    public void testCreateFolderGivenEmptyPath() throws Exception {
+    public void testCreateFolderLocalGivenEmptyPath() throws Exception {
         ZopExportPlugin plugin = new ZopExportPlugin();
-        assertFalse(WhiteboxImpl.invokeMethod(plugin, "createFolder", Paths.get("")));
+        assertFalse(WhiteboxImpl.invokeMethod(plugin, "createFolderLocal", Paths.get("")));
     }
 
-    @Ignore
     @Test
-    public void testCreateFolderGivenExistingPath() throws Exception {
+    public void testCreateFolderLocalGivenExistingPath() throws Exception {
         ZopExportPlugin plugin = new ZopExportPlugin();
-        Path temp = Paths.get("/tmp");
+        Path temp = tempFolder.toPath();
         assertTrue(Files.exists(temp));
-        assertTrue(WhiteboxImpl.invokeMethod(plugin, "createFolder", temp));
+        assertTrue(WhiteboxImpl.invokeMethod(plugin, "createFolderLocal", temp));
     }
 
-    @Ignore
     @Test
-    public void testCreateFolderGivenUnexistingPath() throws Exception {
+    public void testCreateFolderLocalGivenUnexistingPath() throws Exception {
         ZopExportPlugin plugin = new ZopExportPlugin();
-        final Path path = Paths.get("/tmp/unexisting_path");
+        final Path path = Path.of(tempFolderDirectory, "unexisting_path");
         assertFalse(Files.exists(path));
-        assertTrue(WhiteboxImpl.invokeMethod(plugin, "createFolder", path));
+        assertTrue(WhiteboxImpl.invokeMethod(plugin, "createFolderLocal", path));
         assertTrue(Files.exists(path));
         Files.delete(path);
         assertFalse(Files.exists(path));
     }
 
-    /* Tests for the method createCTL(Path) */
-    @Ignore
+    /* Tests for the method createCTLLocal(Path) */
     @Test
-    public void testCreateCTLGivenAPath() throws Exception {
+    public void testCreateCTLLocalGivenAPath() throws Exception {
         ZopExportPlugin plugin = new ZopExportPlugin();
-        final Path path = Paths.get("/tmp/ctl_test");
+        final Path path = Path.of(tempFolderDirectory, "ctl_test");
         final Path filePath = path.getParent().resolve(path.getFileName().toString().concat(".ctl"));
         assertFalse(Files.exists(filePath));
-        WhiteboxImpl.invokeMethod(plugin, "createCTL", path);
+        WhiteboxImpl.invokeMethod(plugin, "createCTLLocal", path);
         assertTrue(Files.exists(filePath));
         Files.delete(filePath);
         assertFalse(Files.exists(filePath));
