@@ -388,7 +388,6 @@ public class ZopExportPlugin implements IExportPlugin, IPlugin {
      * @param fromPath absolute path to the souce folder
      * @param toPath absolute path to the target folder
      * @return true if the copy is successfully performed, false otherwise
-     * @throws IOException
      */
     private boolean tryCopyLocal(Process process, Path fromPath, Path toPath) {
         StorageProviderInterface provider = StorageProvider.getInstance();
@@ -432,10 +431,14 @@ public class ZopExportPlugin implements IExportPlugin, IPlugin {
             copyImagesSftp(fromPath, toPath);
             createCTLSftp(toPath);
 
-        } catch (Exception e) {
+        } catch (SftpException e) {
             logBoth(process.getId(), LogType.ERROR,
                     "Errors happened trying to copy from '" + fromPath.toString() + "' to '" + username + "@" + hostname + ":" + toPath.toString()
                             + "'.");
+            logBoth(process.getId(), LogType.ERROR, ABORTION_MESSAGE + process.getId());
+            return false;
+        } catch (IOException ee) {
+            logBoth(process.getId(), LogType.ERROR, "Errors happened trying to create the .ctl file.");
             logBoth(process.getId(), LogType.ERROR, ABORTION_MESSAGE + process.getId());
             return false;
         }
@@ -489,6 +492,7 @@ public class ZopExportPlugin implements IExportPlugin, IPlugin {
     /**
      * @param fromPath absolute path to the source folder
      * @param toPath absolute path to the target folder
+     * @throws SftpException
      */
     private void copyImagesSftp(Path fromPath, Path toPath) throws SftpException {
         log.debug("Copy images from '" + fromPath.toString() + "' to '" + username + "@" + hostname + ":" + toPath.toString() + "'.");
@@ -535,8 +539,8 @@ public class ZopExportPlugin implements IExportPlugin, IPlugin {
         Path parentPath = path.getParent();
         StorageProviderInterface provider = StorageProvider.getInstance();
         try {
-            // create the empty .ctl file locally under /tmp
-            Path srcPath = Path.of("/tmp/", fileName);
+            // create the empty .ctl file locally under the default temporary folder, e.g. /tmp for Linux
+            Path srcPath = Path.of(System.getProperty("java.io.tmpdir"), fileName);
             provider.createFile(srcPath);
 
             // copy this .ctl file to the remote location
