@@ -377,7 +377,9 @@ public class ZopExportPlugin implements IExportPlugin, IPlugin {
         try {
             return useSftp ? tryCopySftp(process, fromPath, toPath) : tryCopyLocal(process, fromPath, toPath);
         } finally {
-            sftpChannel.exit();
+            if (sftpChannel!=null) {
+                sftpChannel.exit();                
+            }
             log.debug("=============================== Stopping ZOP Export ===============================");
         }
     }
