@@ -46,6 +46,10 @@
 		<!-- MANDATORY if sftp is set to be true. -->
 		<hostname>CHANGE_ME</hostname>
 		
+		<!-- Port of the remote host. -->
+		<!-- MANDATORY if sftp is set to be true. -->
+		<port>22</port>
+		
 		<!-- Path to the private key file, e.g. ~/.ssh/id_rsa -->
 		<!-- The key is expected to be of PEM format, beginning with `BEGIN RSA PRIVATE KEY`. -->
 		<!-- The OPENSSH format, beginning with `BEGIN OPENSSH PRIVATE KEY`, is not supported yet. -->

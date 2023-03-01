@@ -74,6 +74,7 @@ public class ZopExportPlugin implements IExportPlugin, IPlugin {
     private transient ChannelSftp sftpChannel;
     private String username;
     private String hostname;
+    private int port;
     private String keyPath;
 
     @Override
@@ -88,16 +89,16 @@ public class ZopExportPlugin implements IExportPlugin, IPlugin {
 
     @Override
     public boolean startExport(Process process) throws IOException, InterruptedException, DocStructHasNoTypeException, PreferencesException,
-    WriteException, MetadataTypeNotAllowedException, ExportFileException, UghHelperException, ReadException, SwapException, DAOException,
-    TypeNotAllowedForParentException {
+            WriteException, MetadataTypeNotAllowedException, ExportFileException, UghHelperException, ReadException, SwapException, DAOException,
+            TypeNotAllowedForParentException {
         String benutzerHome = process.getProjekt().getDmsImportImagesPath();
         return startExport(process, benutzerHome);
     }
 
     @Override
     public boolean startExport(Process process, String destination) throws IOException, InterruptedException, DocStructHasNoTypeException,
-    PreferencesException, WriteException, MetadataTypeNotAllowedException, ExportFileException, UghHelperException, ReadException,
-    SwapException, DAOException, TypeNotAllowedForParentException {
+            PreferencesException, WriteException, MetadataTypeNotAllowedException, ExportFileException, UghHelperException, ReadException,
+            SwapException, DAOException, TypeNotAllowedForParentException {
 
         log.debug("=============================== Starting ZOP Export ===============================");
 
@@ -164,7 +165,7 @@ public class ZopExportPlugin implements IExportPlugin, IPlugin {
                 return false;
             }
 
-            // get the volumeTitle if the work is composed of several volumes 
+            // get the volumeTitle if the work is composed of several volumes
             if (logical.getType().isAnchor()) {
                 isOneVolumeWork = false;
                 logical = logical.getAllChildren().get(0);
@@ -194,6 +195,7 @@ public class ZopExportPlugin implements IExportPlugin, IPlugin {
         if (useSftp) {
             username = config.getString("username").trim();
             hostname = config.getString("hostname").trim();
+            port = config.getInt("port", 22);
             keyPath = config.getString("keyPath").trim();
 
             if (StringUtil.isBlank(username) || StringUtil.isBlank(hostname)) {
@@ -318,7 +320,7 @@ public class ZopExportPlugin implements IExportPlugin, IPlugin {
         String pathString = path.toString();
         String[] folders = pathString.split("/");
         for (String folder : folders) {
-            if (folder.equals(".") || folder.equals("..")) {
+            if (".".equals(folder) || "..".equals(folder)) {
                 sftpChannel.cd(folder);
                 continue;
             }
@@ -377,8 +379,8 @@ public class ZopExportPlugin implements IExportPlugin, IPlugin {
         try {
             return useSftp ? tryCopySftp(process, fromPath, toPath) : tryCopyLocal(process, fromPath, toPath);
         } finally {
-            if (sftpChannel!=null) {
-                sftpChannel.exit();                
+            if (sftpChannel != null) {
+                sftpChannel.exit();
             }
             log.debug("=============================== Stopping ZOP Export ===============================");
         }
@@ -594,6 +596,7 @@ public class ZopExportPlugin implements IExportPlugin, IPlugin {
         JSch jsch = new JSch();
         jsch.addIdentity(keyPath);
         Session jschSession = jsch.getSession(username, hostname);
+        jschSession.setPort(port);
         jschSession.connect();
         return (ChannelSftp) jschSession.openChannel("sftp");
     }
