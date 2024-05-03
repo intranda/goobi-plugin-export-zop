@@ -33,6 +33,10 @@
 		<!-- If left blank, then the default setting '/opt/digiverso/viewer/hotfolder' will be used. -->
 		<path></path>
 		
+		<!-- define if the expoart shall be cancelled if the target directory is not empty -->
+		<!-- if this parameter is missing the default is true -->
+		<checkIfPathEmpty>true</checkIfPathEmpty>
+		
 		<!-- Whether or not use SFTP for the export. -->
 		<!-- If true then use SFTP. If false then perform local export. -->
 		<!-- If left blank, then the default setting 'false' will be used. -->

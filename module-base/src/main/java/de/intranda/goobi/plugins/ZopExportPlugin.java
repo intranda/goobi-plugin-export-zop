@@ -76,6 +76,7 @@ public class ZopExportPlugin implements IExportPlugin, IPlugin {
     private String hostname;
     private int port;
     private String keyPath;
+    private boolean checkIfPathEmpty = true;
 
     @Override
     public void setExportFulltext(boolean arg0) {
@@ -124,7 +125,9 @@ public class ZopExportPlugin implements IExportPlugin, IPlugin {
             }
             path = destination;
         }
-
+        checkIfPathEmpty = config.getBoolean("checkIfPathEmpty", true);
+        
+        
         // read information from config file
         String fieldIdentifier = config.getString("identifier").trim();
         String fieldVolume = config.getString("volume").trim();
@@ -395,7 +398,7 @@ public class ZopExportPlugin implements IExportPlugin, IPlugin {
      */
     private boolean tryCopyLocal(Process process, Path fromPath, Path toPath) {
         StorageProviderInterface provider = StorageProvider.getInstance();
-        if (!provider.list(toPath.toString()).isEmpty()) {
+        if (checkIfPathEmpty && !provider.list(toPath.toString()).isEmpty()) {
             logBoth(process.getId(), LogType.ERROR, "The directory: '" + toPath.toString() + "' is not empty!");
             logBoth(process.getId(), LogType.ERROR, ABORTION_MESSAGE + process.getId());
             return false;
@@ -426,7 +429,7 @@ public class ZopExportPlugin implements IExportPlugin, IPlugin {
     private boolean tryCopySftp(Process process, Path fromPath, Path toPath) {
         try {
             // check if the targeted directory is empty:
-            if (sftpChannel.ls(toPath.toString()).size() > 2) { // because of the existence of `.` and `..` in empty folders
+            if (checkIfPathEmpty && sftpChannel.ls(toPath.toString()).size() > 2) { // because of the existence of `.` and `..` in empty folders
                 logBoth(process.getId(), LogType.ERROR, "The directory: '" + toPath.toString() + "' is not empty!");
                 logBoth(process.getId(), LogType.ERROR, ABORTION_MESSAGE + process.getId());
                 return false;
