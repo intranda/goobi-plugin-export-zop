@@ -126,8 +126,7 @@ public class ZopExportPlugin implements IExportPlugin, IPlugin {
             path = destination;
         }
         checkIfPathEmpty = config.getBoolean("checkIfPathEmpty", true);
-        
-        
+
         // read information from config file
         String fieldIdentifier = config.getString("identifier").trim();
         String fieldVolume = config.getString("volume").trim();
@@ -524,9 +523,8 @@ public class ZopExportPlugin implements IExportPlugin, IPlugin {
         String fileName = path.getFileName().toString().concat(".ctl");
         // and it should be created next to the folder, i.e. into the folder's parent's path
         Path parentPath = path.getParent();
-        StorageProviderInterface provider = StorageProvider.getInstance();
         try {
-            provider.createFile(parentPath.resolve(fileName));
+            Files.createFile(parentPath.resolve(fileName));
         } catch (IOException e) {
             log.debug("Some error happened while trying to create the .ctl file.");
             throw e;
@@ -548,7 +546,7 @@ public class ZopExportPlugin implements IExportPlugin, IPlugin {
         try {
             // create the empty .ctl file locally under the default temporary folder, e.g. /tmp for Linux
             Path srcPath = Path.of(System.getProperty("java.io.tmpdir"), fileName);
-            provider.createFile(srcPath);
+            Files.createFile(srcPath);
 
             // copy this .ctl file to the remote location
             Path destPath = parentPath.resolve(fileName);
