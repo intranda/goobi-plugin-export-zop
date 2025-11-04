@@ -3,6 +3,10 @@ title: ZOP Export
 identifier: intranda_export_zop
 published: true
 description: This is a technical documentation for the ZOP Export Plugin. It enables the export into the ZOP instance of the ZB Zürich.
+keywords:
+    - Goobi workflow
+    - Plugin
+    - Export Plugin
 ---
 ## Introduction
 This documentation describes the installation, configuration and use of the ZOP export plugin in Goobi.
