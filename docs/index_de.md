@@ -129,4 +129,4 @@ Die Konfiguration des Plugins erfolgt über die Konfigurationsdatei `plugin_intr
 | `sftp`            | Dieser Parameter legt fest, ob der Export mittels SFTP stattfinden soll. |
 | `username`        | Dieser Parameter legt fest, welcher Nutzername für die Anmeldung bei dem Remote-Host verwendet werden soll. |
 | `hostname`        | Dieser Parameter legt fest, wie der Remote-Host heißt. |
-| `keyPath`        | Dieser Parameter legt fest, mit welcher privaten Schlüssel bei `username`@`hostname` verwendet werden soll. |
+| `keyPath`        | Dieser Parameter legt fest, mit welchem privaten Schlüssel bei `username`@`hostname` verwendet werden soll. |

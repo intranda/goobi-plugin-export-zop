@@ -129,4 +129,4 @@ The plugin is configured via the configuration file `plugin_intranda_export_zop.
 | `sftp`       | This parameter determines whether to use SFTP for the export process or not. |
 | `username`   | This parameter determines the user name to log into the remote host. |
 | `hostname`   | This parameter determines the name of the remote host or its IP address. |
-| `keyPath`   | This parameter determines the privte key to be used to log into the remote host as `username`@`hostname`. |
+| `keyPath`   | This parameter determines the private key to be used to log into the remote host as `username`@`hostname`. |
